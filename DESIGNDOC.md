@@ -19,3 +19,6 @@ A couple concerns:
 
 ## Packages
 * [flag](https://pkg.go.dev/flag)
+
+## Source
+[tutorial](https://www.rapid7.com/blog/post/2016/08/04/build-a-simple-cli-tool-with-golang/)
