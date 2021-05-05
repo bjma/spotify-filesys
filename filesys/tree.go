@@ -9,9 +9,13 @@ import (
 
 var client *spotify.Client = nil
 
-// Can be a playlist or folder
-// If format is folder, children array is populated with SimplePlaylist pointers
-// If format is playlist, children array is populated with PlaylistTrack pointers
+/*
+ * Abstraction for tracks, playlists, and folders
+ * If Format is type:
+ * - Folder: childrens list contains Nodes of Format `playlist`; no ID is assigned
+ * - Playlist: childrens list is empty; instead, ID is assigned to retrieve tracks on request
+ * - Track: no ID and no children
+ */
 type Node struct {
 	Name         string     // Playlist or folder name
 	Format       string     // {"folder", "playlist", "track"}
@@ -20,10 +24,6 @@ type Node struct {
 	Num_children int
 }
 
-// Should be able to support the following commands:
-// - tree
-// - cwp
-// - mv
 type Tree struct {
 	client       *spotify.Client         // Reference to Spotify client for mounting purposes
 	cwp          *spotify.SimplePlaylist // Current working playlist
@@ -31,8 +31,7 @@ type Tree struct {
 	num_children int
 }
 
-// Fetches playlists within entire user library
-// Public scoping because it'd be pretty useful
+// Fetches all playlists in user library
 func FetchPlaylists() []spotify.SimplePlaylist {
 	var ret []spotify.SimplePlaylist
 	offset := 0
@@ -53,8 +52,8 @@ func FetchPlaylists() []spotify.SimplePlaylist {
 	return ret
 }
 
-// Constructs a folder by doing a depth-first search on a list of playlists
-// Because the API returns folder content in linear order, we can treat this as DFS
+// Constructs a folder Node by doing a depth-first search on a list of playlists
+// Returns offset for index to avoid unnecessary searches/parsing
 func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (Node, int) {
 	var children []Node
 	iter := 0
@@ -75,9 +74,6 @@ func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index i
 }
 
 // Constructs a Node of format "Playlist"
-// I don't think we need to store the tracks as children;
-// instead, we should save the ID so that we can retrieve
-// the tracks on demand
 func constructPlaylist(name string, playlist_id spotify.ID) Node {
 	return Node{
 		Name:         name,
@@ -93,12 +89,12 @@ func parseLibrary(folders map[string]string) []Node {
 	var nodes []Node
 
 	playlists := FetchPlaylists()
-	//fmt.Printf("Expected 59 got %d\n", len(playlists))
 
 	i := 0
-	// Iterates through user's entire playlist library and initializes data needed to generate directory tree
+	// Iterate through user's entire playlist library and initialize data needed to generate directory tree
 	for i < len(playlists) {
 		uri := string(playlists[i].URI)
+
 		// If current playlist is in a folder, parse it as a folder, then append to playlist
 		// Else, just append to nodes as playlist
 		if folders[uri] != "" {
@@ -110,7 +106,6 @@ func parseLibrary(folders map[string]string) []Node {
 			i++
 		}
 	}
-
 	return nodes
 }
 
