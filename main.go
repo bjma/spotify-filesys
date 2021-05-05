@@ -101,6 +101,12 @@ func completeAuth(w http.ResponseWriter, r *http.Request) {
 	client := auth.NewClient(token)
 	fmt.Fprintf(w, "Login complete!")
 	ch <- &client // read up on the arrows
+
+	user, err := client.CurrentUser()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
 }
 
 // Execute input commands within shell
@@ -148,16 +154,9 @@ func main() {
 	
 	// Construct filesystem and begin interactive shell
 	tree = filesys.BuildTree(client, folders)
-	
-	user, err := client.CurrentUser()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
-
-	reader := bufio.NewReader(os.Stdin)
 
 	// Shell should loop infinitely unless sent SIGINT is raised or `exit` is executed
+	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("> ")
 		input, err := reader.ReadString('\n')
