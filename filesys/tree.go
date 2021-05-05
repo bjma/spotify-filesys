@@ -14,7 +14,6 @@ var client *spotify.Client = nil
  * If Format is type:
  * - Folder: childrens list contains Nodes of Format `playlist`; no ID is assigned
  * - Playlist: childrens list is empty; instead, ID is assigned to retrieve tracks on request
- * - Track: no ID and no children
  */
 type Node struct {
 	Name         string     // Playlist or folder name
