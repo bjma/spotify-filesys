@@ -30,48 +30,55 @@ type Tree struct {
 	num_children int				
 }
 
-func contains(list []Node, comparator string) bool {
+func contains(list []string, comparator string) bool {
 	for _, elem := range list {
-		if elem.Name == comparator {
+		if elem == comparator {
 			return true
 		}
 	}
 	return false
 }
 
-// Constructs a folder by doing an exhaustive search on user's playlists
-// If folder name matches parameter, then add to children and return array
-// This is really fucking slow lmao
-func constructFolder(dirname string, index int, folders map[string]string) Node {
-	offset := index
+// Fetches playlists within entire user library
+func FetchPlaylists() []spotify.SimplePlaylist {
+	var ret []spotify.SimplePlaylist
+	offset := 0
 	limit := 20
-
-	var children []Node
-	flag := false
 
 	for {
 		playlists, err := client.CurrentUsersPlaylistsOpt(&spotify.Options{ Offset: &offset, Limit: &limit })
-		if err != nil || playlists == nil || flag {
+		if err != nil || playlists == nil || len(playlists.Playlists) < 1 {
 			break
 		}
-		for _, playlist := range playlists.Playlists {
-			playlist_uri := string(playlist.URI)
 
-			// Construct children
-			if folders[playlist_uri] == dirname {
-				// Append Node of format "Playlist"
-				children = append(children, constructPlaylist(playlist.Name, playlist.ID))
-			} else {
-				flag = true
-			}
+		for _, playlist := range playlists.Playlists {
+			ret = append(ret, playlist)
 		}
+		// Increment offset for pagination
+		offset += limit
 	}
-	return Node{
+	return ret
+}
+
+// Constructs a folder by doing an exhaustive search on user's playlists
+// If folder name matches parameter, then add to children and return array
+// This is really fucking slow lmao
+func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (Node, int) {
+	var children []Node
+	iter := 0
+
+	for i := index; i < len(playlists) && folders[string(playlists[i].URI)] == dirname; i++ {
+		playlist := playlists[i]
+		children = append(children, constructPlaylist(playlist.Name, playlist.ID))
+		iter++
+	}
+	node := Node{
 		Name: dirname,
 		Format: "folder",
 		Children: children,
 		Num_children: len(children),
 	}
+	return node, iter
 }
 
 // Constructs a Node of format "Playlist"
@@ -82,7 +89,6 @@ func constructPlaylist(name string, playlist_id spotify.ID) Node {
 	if err != nil {
 		panic(err)
 	}
-
 	for _, track := range tracks.Tracks {
 		children = append(children, Node{
 			Name: track.Track.Name,
@@ -101,40 +107,30 @@ func constructPlaylist(name string, playlist_id spotify.ID) Node {
 }
 
 // Parses entire user library for building filesystem
-func parseLibrary(folders map[string]string) ([]Node, int) {	
+func parseLibrary(folders map[string]string) []Node {	
 	var nodes []Node
 
-	offset := 0
-	limit := 20
-	count := 0
 
-	// Iterates through user's entire playlist library and initializes data
-	// needed to generate directory tree
-	for {
-		playlists, err := client.CurrentUsersPlaylistsOpt(&spotify.Options{ Offset: &offset, Limit: &limit })
-		if err != nil || playlists == nil || len(playlists.Playlists) < 1 {
-			break
+	playlists := FetchPlaylists()
+	//fmt.Printf("Expected 59 got %d\n", len(playlists))
+
+	i := 0
+	// Iterates through user's entire playlist library and initializes data needed to generate directory tree
+	for i < len(playlists) {
+		uri := string(playlists[i].URI)
+		// If current playlist is in a folder, parse it as a folder, then append to playlist
+		// Else, just append to nodes as playlist
+		if folders[uri] != "" {
+			node, iter := constructFolder(playlists, folders[uri], i, folders)
+			nodes = append(nodes, node)
+			i += iter
+		} else {
+			nodes = append(nodes, constructPlaylist(playlists[i].Name, playlists[i].ID))
+			i++
 		}
-
-		for _, playlist := range playlists.Playlists {
-			playlist_uri := string(playlist.URI)
-
-			// If playlist belongs to folder, construct folder and set it to children;
-			// Else, simply append it.
-			if folders[playlist_uri] == "" { 
-				nodes = append(nodes, constructPlaylist(playlist.Name, playlist.ID))
-				count++
-			} else { 						
-				node := constructFolder(folders[playlist_uri], count, folders)
-				if !contains(nodes, node.Name) {
-					nodes = append(nodes, constructFolder(folders[playlist_uri], count, folders))
-				}
-			}
-		}
-		// Increment offset for pagination
-		offset += limit
 	}
-	return nodes, count
+	
+	return nodes
 }
 
 // Debugging purposes
@@ -158,7 +154,7 @@ func PrintTree(t *Tree) {
 func BuildTree(c *spotify.Client, f map[string]string) *Tree {
 	client = c
 
-	nodes, _ := parseLibrary(f)
+	nodes := parseLibrary(f)
 	
 	return &Tree{
 		client: client,
