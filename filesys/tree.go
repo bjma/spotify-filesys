@@ -13,10 +13,10 @@ var client *spotify.Client = nil
 // If format is folder, children array is populated with SimplePlaylist pointers
 // If format is playlist, children array is populated with PlaylistTrack pointers
 type Node struct {
-	Name 	 	 string 	   // Playlist or folder name
-	Format 	 	 string   	   // {"folder", "playlist", "track"}
-	Children 	 []Node 	   // Children of node
-	Id 			 spotify.ID	   // If playlist, we save its ID for access to tracks
+	Name         string     // Playlist or folder name
+	Format       string     // {"folder", "playlist", "track"}
+	Children     []Node     // Children of node
+	Id           spotify.ID // If playlist, we save its ID for access to tracks
 	Num_children int
 }
 
@@ -25,29 +25,21 @@ type Node struct {
 // - cwp
 // - mv
 type Tree struct {
-	client 		 *spotify.Client 		 // Reference to Spotify client for mounting purposes
-	cwp 	     *spotify.SimplePlaylist // Current working playlist
-	children 	 []Node  				 // Subdirectories
-	num_children int				
-}
-
-func contains(list []string, comparator string) bool {
-	for _, elem := range list {
-		if elem == comparator {
-			return true
-		}
-	}
-	return false
+	client       *spotify.Client         // Reference to Spotify client for mounting purposes
+	cwp          *spotify.SimplePlaylist // Current working playlist
+	children     []Node                  // Subdirectories
+	num_children int
 }
 
 // Fetches playlists within entire user library
+// Public scoping because it'd be pretty useful
 func FetchPlaylists() []spotify.SimplePlaylist {
 	var ret []spotify.SimplePlaylist
 	offset := 0
 	limit := 20
 
 	for {
-		playlists, err := client.CurrentUsersPlaylistsOpt(&spotify.Options{ Offset: &offset, Limit: &limit })
+		playlists, err := client.CurrentUsersPlaylistsOpt(&spotify.Options{Offset: &offset, Limit: &limit})
 		if err != nil || playlists == nil || len(playlists.Playlists) < 1 {
 			break
 		}
@@ -73,10 +65,10 @@ func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index i
 		iter++
 	}
 	node := Node{
-		Name: dirname,
-		Format: "folder",
-		Children: children,
-		Id: "",
+		Name:         dirname,
+		Format:       "folder",
+		Children:     children,
+		Id:           "",
 		Num_children: len(children),
 	}
 	return node, iter
@@ -84,22 +76,21 @@ func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index i
 
 // Constructs a Node of format "Playlist"
 // I don't think we need to store the tracks as children;
-// instead, we should save the ID so that we can retrieve 
+// instead, we should save the ID so that we can retrieve
 // the tracks on demand
 func constructPlaylist(name string, playlist_id spotify.ID) Node {
 	return Node{
-		Name: name,
-		Format: "playlist",
-		Children: nil,
-		Id: playlist_id,
+		Name:         name,
+		Format:       "playlist",
+		Children:     nil,
+		Id:           playlist_id,
 		Num_children: 0,
 	}
 }
 
 // Parses entire user library for building filesystem
-func parseLibrary(folders map[string]string) []Node {	
+func parseLibrary(folders map[string]string) []Node {
 	var nodes []Node
-
 
 	playlists := FetchPlaylists()
 	//fmt.Printf("Expected 59 got %d\n", len(playlists))
@@ -119,7 +110,7 @@ func parseLibrary(folders map[string]string) []Node {
 			i++
 		}
 	}
-	
+
 	return nodes
 }
 
@@ -130,7 +121,7 @@ func PrintTree(t *Tree) {
 	fmt.Println(".")
 	for _, node := range tree {
 		fmt.Printf("\t%s\n", node.Name)
-		if (node.Format == "folder") {
+		if node.Format == "folder" {
 			for _, child := range node.Children {
 				fmt.Print("\t\t")
 				fmt.Println(child.Name)
@@ -145,10 +136,10 @@ func BuildTree(c *spotify.Client, f map[string]string) *Tree {
 	client = c
 
 	nodes := parseLibrary(f)
-	
+
 	return &Tree{
-		client: client,
-		cwp: nil, // figure out what to do for root
+		client:   client,
+		cwp:      nil, // figure out what to do for root
 		children: nodes,
 	}
 }

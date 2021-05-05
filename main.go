@@ -5,41 +5,41 @@ import (
 	"fmt"
 	"log"
 
-	"os"
 	"bufio"
+	"os"
 	"strings"
 
 	"errors"
 
 	"net/http"
 
-	"io/ioutil"
 	"encoding/json"
+	"io/ioutil"
 
 	// Libraries
 	"github.com/zmb3/spotify"
 
 	// Modules
-	"github.com/bjma/spotify-filesys/cmd" // Subcommands
+	"github.com/bjma/spotify-filesys/cmd"     // Subcommands
 	"github.com/bjma/spotify-filesys/filesys" // Filesystem
 )
 
 // Authentication details
 const redirectURI = "http://localhost:8080/callback"
+
 var (
 	// Idk if i like looking at this
-	auth = spotify.NewAuthenticator(redirectURI, 
-		spotify.ScopeUserReadPrivate, 
+	auth = spotify.NewAuthenticator(redirectURI,
+		spotify.ScopeUserReadPrivate,
 		spotify.ScopePlaylistReadPrivate,
 	)
-	ch = make(chan *spotify.Client)
-	state = "abc123"
-	client *spotify.Client = nil 
+	ch                     = make(chan *spotify.Client)
+	state                  = "abc123"
+	client *spotify.Client = nil
 )
 
 // Global reference to directory tree
 var tree *filesys.Tree
-
 
 // Parses config file and returns a map representation of JSON content
 // Source: https://golangr.com/read-json-file/
@@ -51,23 +51,23 @@ func readConfig(filename string) (string, string, map[string]string) {
 	}
 	// Folder objects in config.folders field
 	type Folder struct {
-		Uri      string     `json: "uri"` 
+		Uri      string     `json: "uri"`
 		Type     string     `json: "type"`
 		Children []Playlist `json: "children"`
-		Name     string 	`json: "name"`
+		Name     string     `json: "name"`
 	}
 	// Config file struct
 	type Config struct {
-		Client_id 	  string   `json: "client_id"`
+		Client_id     string   `json: "client_id"`
 		Client_secret string   `json: "client_secret"`
 		Folders       []Folder `json: "folders"`
 	}
-	
+
 	file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
-	
+
 	// Write JSON into buffer
 	buffer := Config{}
 	if err = json.Unmarshal(file, &buffer); err != nil {
@@ -86,7 +86,7 @@ func readConfig(filename string) (string, string, map[string]string) {
 }
 
 // Completes authentication by verifying credentials
-// Source: https://github.com/zmb3/spotify/blob/master/examples/authenticate/authcode/authenticate.go 
+// Source: https://github.com/zmb3/spotify/blob/master/examples/authenticate/authcode/authenticate.go
 func completeAuth(w http.ResponseWriter, r *http.Request) {
 	token, err := auth.Token(state, r)
 	if err != nil {
@@ -113,14 +113,14 @@ func execInput(input string) error {
 	// Handle execution of input
 	// Switch cases for subcommands
 	switch input {
-		case "hello": // Testing purposes
-			cmd.HelloInit(args[1:])
-		case "lib":
-			filesys.PrintTree(tree)
-		case "exit":
-			os.Exit(1)
-		default:
-			return errors.New("computer said to tell u that ur fucking stupid")
+	case "hello": // Testing purposes
+		cmd.HelloInit(args[1:])
+	case "lib":
+		filesys.PrintTree(tree)
+	case "exit":
+		os.Exit(1)
+	default:
+		return errors.New("computer said to tell u that ur fucking stupid")
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func startShell() {
 		log.Fatal(err)
 	}
 	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
-	
+
 	// Read in standard inputs
 	reader := bufio.NewReader(os.Stdin)
 	// Shell should loop infinitely unless sent SIGINT is raised
