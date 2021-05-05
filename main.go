@@ -115,7 +115,10 @@ func execInput(input string) error {
 	switch input {
 	case "hello": // Testing purposes
 		cmd.HelloInit(args[1:])
-	case "lib":
+	case "whoami":
+		user, _ := client.CurrentUser()
+		fmt.Println(user.ID)
+	case "tree":
 		filesys.PrintTree(tree)
 	case "exit":
 		os.Exit(1)
@@ -123,33 +126,6 @@ func execInput(input string) error {
 		return errors.New("computer said to tell u that ur fucking stupid")
 	}
 	return nil
-}
-
-// Executes the interactive shell
-func startShell() {
-	// Use client to make API calls that require authorization
-	user, err := client.CurrentUser()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
-
-	// Read in standard inputs
-	reader := bufio.NewReader(os.Stdin)
-	// Shell should loop infinitely unless sent SIGINT is raised
-	for {
-		fmt.Print("> ")
-		// Read keyboard inputs
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-
-		// Execute commands
-		if err = execInput(input); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-	}
 }
 
 func main() {
@@ -167,12 +143,31 @@ func main() {
 	url := auth.AuthURL(state)
 	fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
 
-	// Wait for auth to complete (def go back and revisit these)
-	client = <-ch
-
-	// Parse user library and build tree
+	// Wait for auth to complete 
+	client = <- ch
+	
+	// Construct filesystem and begin interactive shell
 	tree = filesys.BuildTree(client, folders)
+	
+	user, err := client.CurrentUser()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
 
-	// Run shell
-	startShell()
+	reader := bufio.NewReader(os.Stdin)
+
+	// Shell should loop infinitely unless sent SIGINT is raised or `exit` is executed
+	for {
+		fmt.Print("> ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+
+		// Execute commands
+		if err = execInput(input); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}
 }
