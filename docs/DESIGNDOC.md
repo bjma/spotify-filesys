@@ -22,3 +22,4 @@ A couple concerns:
 
 ## Source
 [tutorial](https://www.rapid7.com/blog/post/2016/08/04/build-a-simple-cli-tool-with-golang/)
+[spotify wrapper docs](https://pkg.go.dev/github.com/zmb3/spotify)

@@ -21,25 +21,46 @@ import (
 
 	// Modules
 	"github.com/bjma/spotify-filesys/cmd" // Subcommands
-	_ "github.com/bjma/spotify-filesys/tests" // Unit testing
+	"github.com/bjma/spotify-filesys/filesys" // Filesystem
 )
 
 // Authentication details
 const redirectURI = "http://localhost:8080/callback"
-
 var (
-	auth = spotify.NewAuthenticator(redirectURI, spotify.ScopeUserReadPrivate)
+	// Idk if i like looking at this
+	auth = spotify.NewAuthenticator(redirectURI, 
+		spotify.ScopeUserReadPrivate, 
+		spotify.ScopePlaylistReadPrivate,
+	)
 	ch = make(chan *spotify.Client)
 	state = "abc123"
+	client *spotify.Client = nil 
 )
 
-// Parses JSON file for credentials and returns client ID and secret
+// Global reference to directory tree
+var tree *filesys.Tree
+
+
+// Parses config file and returns a map representation of JSON content
 // Source: https://golangr.com/read-json-file/
-func fetchCredentials(filename string) (id, secret string) {
-	// I guess structures make parsing JSONs easier (but leaves lots of trash)
-	type Credentials struct {
-		Client_id string `json: "client_id"`
-		Client_secret string `json: "client_secret"`
+func readConfig(filename string) (string, string, map[string]string) {
+	// Playlists in config.folders.children field
+	type Playlist struct {
+		Type string `json: "type"`
+		Uri  string `json: "uri"`
+	}
+	// Folder objects in config.folders field
+	type Folder struct {
+		Uri      string     `json: "uri"` 
+		Type     string     `json: "type"`
+		Children []Playlist `json: "children"`
+		Name     string 	`json: "name"`
+	}
+	// Config file struct
+	type Config struct {
+		Client_id 	  string   `json: "client_id"`
+		Client_secret string   `json: "client_secret"`
+		Folders       []Folder `json: "folders"`
 	}
 	
 	file, err := ioutil.ReadFile(filename)
@@ -47,15 +68,24 @@ func fetchCredentials(filename string) (id, secret string) {
 		panic(err)
 	}
 	
-	buffer := Credentials{}
-	// Unmarshal JSON
+	// Write JSON into buffer
+	buffer := Config{}
 	if err = json.Unmarshal(file, &buffer); err != nil {
 		panic(err)
 	}
 
-	return buffer.Client_id, buffer.Client_secret
+	// Additional stuff for folder parsing
+	folders := make(map[string]string)
+	for _, folder := range buffer.Folders {
+		for _, playlist := range folder.Children {
+			folders[playlist.Uri] = folder.Name
+		}
+	}
+
+	return buffer.Client_id, buffer.Client_secret, folders
 }
 
+// Completes authentication by verifying credentials
 // Source: https://github.com/zmb3/spotify/blob/master/examples/authenticate/authcode/authenticate.go 
 func completeAuth(w http.ResponseWriter, r *http.Request) {
 	token, err := auth.Token(state, r)
@@ -73,28 +103,37 @@ func completeAuth(w http.ResponseWriter, r *http.Request) {
 	ch <- &client // read up on the arrows
 }
 
-
+// Execute input commands within shell
 func execInput(input string) error {
-	// Tokenize input by removing newline 
+	// Tokenize input against whitespace and remove newline
 	input = strings.TrimSuffix(input, "\n")
+	args := strings.Split(input, " ")
+	input = args[0]
 
 	// Handle execution of input
 	// Switch cases for subcommands
-	// Need to figure out how to make HTTP requests from commands module, or do it from here via commands
-	// Somehow need to pass user globally; gotta figure that out
 	switch input {
-		case "hello":
-			cmd.HelloInit(os.Args[1:])
+		case "hello": // Testing purposes
+			cmd.HelloInit(args[1:])
+		case "lib":
+			filesys.PrintTree(tree)
 		case "exit":
 			os.Exit(1)
 		default:
-			return errors.New("Oopsies")
+			return errors.New("computer said to tell u that ur fucking stupid")
 	}
 	return nil
 }
 
 // Executes the interactive shell
 func startShell() {
+	// Use client to make API calls that require authorization
+	user, err := client.CurrentUser()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
+	
 	// Read in standard inputs
 	reader := bufio.NewReader(os.Stdin)
 	// Shell should loop infinitely unless sent SIGINT is raised
@@ -115,8 +154,7 @@ func startShell() {
 
 func main() {
 	// Set authentication details
-	client_id, client_secret := fetchCredentials(".credentials.json")
-	//fmt.Printf("client_id=%s\nclient_secret=%s", client_id, client_secret)
+	client_id, client_secret, folders := readConfig(".config.json")
 	auth.SetAuthInfo(client_id, client_secret)
 
 	// Start HTTP server
@@ -127,19 +165,13 @@ func main() {
 	go http.ListenAndServe(":8080", nil)
 
 	url := auth.AuthURL(state)
-	fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
+	fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
 
 	// Wait for auth to complete (def go back and revisit these)
-	client := <-ch
+	client = <-ch
 
-	// Use client to make API calls that require authorization
-	user, err := client.CurrentUser()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("You are logged in as: %s\n", user.ID) // Need to figure out how to cache this
-	
-	// At this point, create directory structure
+	// Parse user library and build tree
+	tree = filesys.BuildTree(client, folders)
 
 	// Run shell
 	startShell()
