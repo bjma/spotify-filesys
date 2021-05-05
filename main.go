@@ -106,7 +106,7 @@ func completeAuth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("You are logged in as: %s\n\n", user.ID) // Need to figure out how to cache this
+	fmt.Printf("You are logged in as: %s\n\n", user.ID)
 }
 
 // Execute input commands within shell
