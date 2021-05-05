@@ -16,6 +16,7 @@ type Node struct {
 	Name 	 	 string 	   // Playlist or folder name
 	Format 	 	 string   	   // {"folder", "playlist", "track"}
 	Children 	 []Node 	   // Children of node
+	Id 			 spotify.ID	   // If playlist, we save its ID for access to tracks
 	Num_children int
 }
 
@@ -60,9 +61,8 @@ func FetchPlaylists() []spotify.SimplePlaylist {
 	return ret
 }
 
-// Constructs a folder by doing an exhaustive search on user's playlists
-// If folder name matches parameter, then add to children and return array
-// This is really fucking slow lmao
+// Constructs a folder by doing a depth-first search on a list of playlists
+// Because the API returns folder content in linear order, we can treat this as DFS
 func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (Node, int) {
 	var children []Node
 	iter := 0
@@ -76,32 +76,22 @@ func constructFolder(playlists []spotify.SimplePlaylist, dirname string, index i
 		Name: dirname,
 		Format: "folder",
 		Children: children,
+		Id: "",
 		Num_children: len(children),
 	}
 	return node, iter
 }
 
 // Constructs a Node of format "Playlist"
+// I don't think we need to store the tracks as children;
+// instead, we should save the ID so that we can retrieve 
+// the tracks on demand
 func constructPlaylist(name string, playlist_id spotify.ID) Node {
-	//var children []Node
-
-	/*tracks, err := client.GetPlaylistTracks(playlist_id)
-	if err != nil {
-		panic(err)
-	}
-	for _, track := range tracks.Tracks {
-		children = append(children, Node{
-			Name: track.Track.Name,
-			Format: "track",
-			Children: nil,
-			Num_children: 0,
-		})
-	}*/
-
 	return Node{
 		Name: name,
 		Format: "playlist",
 		Children: nil,
+		Id: playlist_id,
 		Num_children: 0,
 	}
 }
