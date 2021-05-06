@@ -4,13 +4,37 @@ The idea is to emulate a simple Unix-like filesystem but for a user's Spotify li
 ## Installation
 This project requires `go1.16.3`. To install, simply run:
 ```
-go get github.com/bjma/spotify-filesys
+$ go get github.com/bjma/spotify-filesys
 ```
 
-## Config
-The Spotify API doesn't support playlist folders, so in order to parse folders within your library correctly, create a `.config.json` file, which should look something like this:
+## Setup
+Before doing anything, you should first login to your [dashboard](https://developer.spotify.com/dashboard/login) for Spotify Developers, or create account if you don't have one. There, click the "Create An App" options and set the **Redirect URI** to `http://localhost:8888/callback` in your App settings.
+
+The Spotify API doesn't support playlist folders, so in order to parse folders within your library correctly, you need to create a `.config.json` file, which should look something like this:
 
 ```json
+{
+    "client_id": "your_client_id",
+    "client_secret": "your_client_secret",
+    "folders": [
+        {
+            "uri": "spotify:user:user_id:folder:folder_id", 
+            "type": "folder", 
+            "children": [
+                {"type": "playlist", "uri": "spotify:playlist:playlist_id"}, 
+                {"type": "playlist", "uri": "spotify:playlist:playlist_id"}, 
+                {"type": "playlist", "uri": "spotify:playlist:playlist_id"}, 
+            ], 
+            "name": "my_folder"
+        }
+    ]
+}
+```
+
+You can install the [spotify-folders](https://github.com/mikez/spotify-folders) tool on GitHub to aid with this process; simply drag your playlist into your terminal with the following command typed out:
+
+```
+$ spotifyfolders
 ```
 
 ## Supported Commands
