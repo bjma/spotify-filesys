@@ -20,17 +20,17 @@ import (
 	"github.com/zmb3/spotify"
 
 	// Modules
-	"github.com/bjma/spotify-filesys/cmd"     // Subcommands
 	"github.com/bjma/spotify-filesys/filesys" // Filesystem
+	"github.com/bjma/spotify-filesys/cmd"     // Subcommands
 )
 
 // Authentication details
 const redirectURI = "http://localhost:8080/callback"
 
 var (
-	// Idk if i like looking at this
 	auth = spotify.NewAuthenticator(redirectURI,
 		spotify.ScopeUserReadPrivate,
+		spotify.ScopeUserTopRead,
 		spotify.ScopePlaylistReadPrivate,
 	)
 	ch                     = make(chan *spotify.Client)
@@ -68,13 +68,12 @@ func readConfig(filename string) (string, string, map[string]string) {
 		panic(err)
 	}
 
-	// Write JSON into buffer
 	buffer := Config{}
 	if err = json.Unmarshal(file, &buffer); err != nil {
 		panic(err)
 	}
 
-	// Additional stuff for folder parsing
+	// Maps playlist URIs to owner name for parsing folders
 	folders := make(map[string]string)
 	for _, folder := range buffer.Folders {
 		for _, playlist := range folder.Children {
@@ -99,8 +98,7 @@ func completeAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	// Use token to get authenticated client
 	client := auth.NewClient(token)
-	fmt.Fprintf(w, "Login complete!")
-	ch <- &client // read up on the arrows
+	ch <- &client
 
 	user, err := client.CurrentUser()
 	if err != nil {
@@ -116,16 +114,14 @@ func execInput(input string) error {
 	args := strings.Split(input, " ")
 	input = args[0]
 
-	// Handle execution of input
-	// Switch cases for subcommands
 	switch input {
-	case "hello": // Testing purposes
+	case "hello":
 		cmd.HelloInit(args[1:])
 	case "whoami":
 		user, _ := client.CurrentUser()
 		fmt.Println(user.ID)
 	case "tree":
-		filesys.PrintTree(tree)
+		cmd.TreeInit(tree, args[1:])
 	case "exit":
 		os.Exit(1)
 	default:
@@ -149,11 +145,11 @@ func main() {
 	url := auth.AuthURL(state)
 	fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
 
-	// Wait for auth to complete 
-	client = <- ch
-	
+	// Wait for auth to complete
+	client = <-ch
+
 	// Construct filesystem and begin interactive shell
-	tree = filesys.BuildTree(client, folders)
+	tree = filesys.BuildTree(client, folders, 0)
 
 	// Shell should loop infinitely unless sent SIGINT is raised or `exit` is executed
 	reader := bufio.NewReader(os.Stdin)
