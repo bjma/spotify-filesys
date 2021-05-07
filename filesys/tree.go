@@ -1,15 +1,15 @@
 package filesys
 
 import (
-	"fmt"
+	_ "fmt"
 
 	// Libraries
 	"github.com/zmb3/spotify"
 )
 
 var (
-	client *spotify.Client = nil
-	tree_level = 0 // For tree recursion
+	client     *spotify.Client = nil
+	tree_level                 = 0 // For tree recursion
 )
 
 /*
@@ -21,16 +21,76 @@ var (
 type Node struct {
 	Name         string     // Playlist or folder name
 	Format       string     // {"folder", "playlist", "album", "artist", "track"}
-	Children     []Node     // Children of node
+	Children     []*Node     // Children of node
 	Id           spotify.ID // If playlist, we save its ID for access to tracks
 	Num_children int
 }
 
+/*
+ * Essentially the data structure that represents the filesystem;
+ * Navigation and all other stuff will be done on a Tree (see `fs.go`)
+ * 
+ * NOTE: Filesystem should only be done with user library (can maybe try to add saved albums)
+ */
 type Tree struct {
-	Client       *spotify.Client         // Reference to Spotify client for mounting purposes
-	Cwp          *spotify.SimplePlaylist // Current working playlist
-	Children     []Node                  // Subdirectories
+	Client       *spotify.Client // Reference to Spotify client for mounting purposes
+	Cwp          *Node           // Current working playlist (ls will display children of Cwp)
+	Children     []*Node          // Subdirectories
 	Num_children int
+}
+
+// Fetches user's Top 10 Artists (all followed artists too slow)
+func FetchArtists() []spotify.SimpleArtist {
+	var ret []spotify.SimpleArtist
+	limit := 10
+
+	artists, err := client.CurrentUsersTopArtistsOpt(&spotify.Options{Limit: &limit})
+	if err != nil || artists == nil {
+		panic(err)
+	}
+
+	for _, artist := range artists.Artists {
+		ret = append(ret, artist.SimpleArtist)
+	}
+	return ret
+}
+
+// Fetches entire list of albums;
+// If `opt` = 1, return artist discography
+// if `opt` = 2, return saved albums
+func FetchAlbums(id spotify.ID, opt string) []spotify.SimpleAlbum {
+	var ret []spotify.SimpleAlbum
+	offset := 0
+	var limit int
+
+	switch opt {
+	case "artist":
+		limit = 5
+
+		albums, err := client.GetArtistAlbumsOpt(id, &spotify.Options{Offset: &offset, Limit: &limit})
+		if err != nil || albums == nil || len(albums.Albums) < 1 {
+			panic(err)
+		}
+
+		for _, album := range albums.Albums {
+			ret = append(ret, album)
+		}
+	case "user":
+		limit = 20
+
+		for {
+			albums, err := client.CurrentUsersAlbumsOpt(&spotify.Options{Offset: &offset, Limit: &limit})
+			if err != nil || albums == nil || len(albums.Albums) < 1 {
+				break
+			}
+
+			for _, album := range albums.Albums {
+				ret = append(ret, album.SimpleAlbum)
+			}
+			offset += limit
+		}
+	}
+	return ret
 }
 
 // Fetches all playlists in user library
@@ -54,55 +114,25 @@ func FetchPlaylists() []spotify.SimplePlaylist {
 	return ret
 }
 
-// Fetches user's Top 10 Artists (all followed artists too slow)
-func FetchArtists() []spotify.SimpleArtist {
-	var ret []spotify.SimpleArtist
-	limit := 10
-
-	artists, err := client.CurrentUsersTopArtistsOpt(&spotify.Options{Limit: &limit})
-	if err != nil || artists == nil {
-		panic(err)
-	}
-
-	for _, artist := range artists.Artists {
-		ret = append(ret, artist.SimpleArtist)
-	}
-	return ret
-}
-
-// Fetches entire list of albums; 
-// If `opt` = 1, return artist discography
-// if `opt` = 2, return saved albums
-func FetchAlbums(id spotify.ID, opt int) []spotify.SimpleAlbum {
-	var ret []spotify.SimpleAlbum
-	offset := 0
-	var limit int
-
-	switch opt {
-	case 1:
-		limit = 5
-
-		albums, err := client.GetArtistAlbumsOpt(id, &spotify.Options{Offset: &offset, Limit: &limit})
-		if err != nil || albums == nil || len(albums.Albums) < 1 {
-			panic(err)
-		}
-
-		for _, album := range albums.Albums {
-			ret = append(ret, album)
-		}
-	case 2:
-		limit = 20
-
-		for {
-			albums, err := client.CurrentUsersAlbumsOpt(&spotify.Options{Offset: &offset, Limit: &limit})
-			if err != nil || albums == nil || len(albums.Albums) < 1 {
-				break
+// Returns up to LIMIT tracks from a playlist or album
+func FetchTracks(id spotify.ID, limit int, opt string) []spotify.SimpleTrack {
+	var ret []spotify.SimpleTrack
+	if limit > 0 {
+		switch opt {
+		case "playlist":
+			page, err := client.GetPlaylistTracksOpt(id, &spotify.Options{Limit: &limit}, "")
+			if err != nil {
+				panic(err)
 			}
-	
-			for _, album := range albums.Albums {
-				ret = append(ret, album.SimpleAlbum)
+			for _, track := range page.Tracks {
+				ret = append(ret, track.Track.SimpleTrack)
 			}
-			offset += limit
+		case "album":
+			page, err := client.GetAlbumTracksOpt(id, &spotify.Options{Limit: &limit})
+			if err != nil {
+				panic(err)
+			}
+			ret = page.Tracks[:limit]
 		}
 	}
 	return ret
@@ -110,8 +140,8 @@ func FetchAlbums(id spotify.ID, opt int) []spotify.SimpleAlbum {
 
 // Initializes a folder Node by doing a depth-first search on a list of playlists
 // Returns offset for index to avoid unnecessary searches/parsing
-func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (Node, int) {
-	var children []Node
+func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (*Node, int) {
+	var children []*Node
 	iter := 0
 
 	for i := index; i < len(playlists) && folders[string(playlists[i].URI)] == dirname; i++ {
@@ -119,7 +149,7 @@ func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, fo
 		children = append(children, newPlaylist(playlist.Name, playlist.ID))
 		iter++
 	}
-	node := Node{
+	node := &Node{
 		Name:         dirname,
 		Format:       "folder",
 		Children:     children,
@@ -130,8 +160,8 @@ func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, fo
 }
 
 // Initializes a Node of format "Playlist"
-func newPlaylist(name string, playlist_id spotify.ID) Node {
-	return Node{
+func newPlaylist(name string, playlist_id spotify.ID) *Node {
+	return &Node{
 		Name:         name,
 		Format:       "playlist",
 		Children:     nil,
@@ -140,32 +170,32 @@ func newPlaylist(name string, playlist_id spotify.ID) Node {
 	}
 }
 
-func constructArtistTree() []Node {
-	var nodes []Node 
+func constructArtistTree() []*Node {
+	var nodes []*Node
 
 	lib := FetchArtists()
 
 	i := 0
 	for i < len(lib) {
 		// Get list of artist albums
-		albums := FetchAlbums(lib[i].ID, 1)
-		var children []Node
+		albums := FetchAlbums(lib[i].ID, "artist")
+		var children []*Node
 
 		for _, album := range albums {
-			children = append(children, Node{
-				Name: album.Name,
-				Format: "album",
-				Children: nil,
-				Id: album.ID,
+			children = append(children, &Node{
+				Name:         album.Name,
+				Format:       "album",
+				Children:     nil,
+				Id:           album.ID,
 				Num_children: 0,
 			})
 		}
 
-		nodes = append(nodes, Node{
-			Name: lib[i].Name,
-			Format: "artist",
-			Children: children,
-			Id: "",
+		nodes = append(nodes, &Node{
+			Name:         lib[i].Name,
+			Format:       "artist",
+			Children:     children,
+			Id:           "",
 			Num_children: len(children),
 		})
 		i++
@@ -174,9 +204,9 @@ func constructArtistTree() []Node {
 	return nodes
 }
 
-func constructUserTree(folders map[string]string) []Node {
-	var nodes []Node
-	
+func constructUserTree(folders map[string]string) []*Node {
+	var nodes []*Node
+
 	lib := FetchPlaylists()
 
 	i := 0
@@ -200,63 +230,36 @@ func constructUserTree(folders map[string]string) []Node {
 
 // Parses entire user library for building filesystem
 // Need to also figure out a way to do this for Saved Albums and user's Top Artists
-func parseLibrary(opt int, folders map[string]string) []Node {
-	var nodes []Node
-	
+func parseLibrary(opt string, folders map[string]string) []*Node {
+	var nodes []*Node
+
 	switch opt {
-	case 0:
+	case "user":
 		nodes = constructUserTree(folders)
-	case 1:
+	case "artists":
 		nodes = constructArtistTree()
-	case 2:
+	case "albums":
 		break
 	}
 	return nodes
 }
 
-// Debugging purposes
-// Should actually try to do this in a DFS like way
-func PrintTree(t *Tree, flag bool) {
-	tree := t.Children
-
-	fmt.Println(".")
-	for i, node := range tree {
-		if i == t.Num_children - 1 {
-			fmt.Printf("%s%s\n", "└──", node.Name)
-		} else {
-			fmt.Printf("%s%s\n", "├──", node.Name)
-		}
-		if node.Format == "folder" || node.Format == "artist" { 
-			for j, child := range node.Children {
-				if i != t.Num_children - 1 {
-					fmt.Printf("|  ")
-				} else {
-					fmt.Printf("   ")
-				}
-				if j == node.Num_children - 1 {
-					fmt.Printf("%s%s\n", "└──", child.Name)
-				} else {
-					fmt.Printf("%s%s\n", "├──", child.Name)
-				}
-			}
-		}
-	}
-}
-
 // Builds a directory tree
-// Options:
-// - 0 (user library)
-// - 1 (followed artists)
-// - 2 (saved albums)
-func BuildTree(c *spotify.Client, f map[string]string, opt int) *Tree {
+func BuildTree(c *spotify.Client, f map[string]string, opt string) *Tree {
 	client = c
-
 	nodes := parseLibrary(opt, f)
+	root := Node{
+		Name: ".",
+		Format: "root",
+		Children: nodes,
+		Id: "",
+		Num_children: len(nodes),
+	} 
 
 	return &Tree{
-		Client:   client,
-		Cwp:      nil, // figure out what to do for root
-		Children: nodes,
+		Client:       client,
+		Cwp:          &root, // figure out what to do for root
+		Children:     nodes,
 		Num_children: len(nodes),
 	}
 }

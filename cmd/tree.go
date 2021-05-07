@@ -2,8 +2,7 @@ package cmd
 
 import (
 	"flag"
-	_ "flag"
-	_ "fmt"
+	"fmt"
 
 	"github.com/bjma/spotify-filesys/filesys"
 )
@@ -16,34 +15,43 @@ func TreeInit(tree *filesys.Tree, arr []string) {
 	T = tree
 
 	// Flags here
-	artistTreePtr := treeCommand.Bool("artists", false, "Display followed artists and their albums/tracks")
-	albumTreePtr := treeCommand.Bool("albums", false, "Display saved albums")
+	artistTree := treeCommand.Bool("artists", false, "Display followed artists and their albums/tracks")
+	albumTree := treeCommand.Bool("albums", false, "Display saved albums")
+	trackLimit := treeCommand.Int("depth", 0, "Show up to DEPTH tracks")
 
 	treeCommand.Parse(arr)
 
 	if treeCommand.Parsed() {
-		// 0 - user lib; 1 - artist; 2 - saved albums
-		if *artistTreePtr {
-			TreeExecute(1)
-		} else if *albumTreePtr {
-			TreeExecute(2)
+		if *artistTree {
+			TreeExecute("artists", *trackLimit)
+		} else if *albumTree {
+			TreeExecute("albums", *trackLimit)
 		} else {
-			TreeExecute(0)
+			TreeExecute("user", *trackLimit)
 		}
 	}
 }
 
-func TreeExecute(opt int) {
+func TreeExecute(opt string, depth int) (err error) {
+	var t *filesys.Tree
+
+	// Some rule enforcement
+	if depth > 5 || depth < 0 {
+		err = fmt.Errorf("spfs: error: depth limit exceeded")
+		fmt.Println(err)
+		return err
+	}
+
 	switch opt {
-	case 0:
-		filesys.PrintTree(T, false)
-	case 1:
+	case "user":
+		t = T
+	case "artists":
 		// Generate artist tree
-		artists := filesys.BuildTree(T.Client, nil, 1)
-		filesys.PrintTree(artists, false)
-		break
-	case 2:
+		t = filesys.BuildTree(T.Client, nil, "artists")
+	case "albums":
 		// Generate album tree
 		break
 	}
+	filesys.PrintTree(t, depth)
+	return
 }

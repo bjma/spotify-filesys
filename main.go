@@ -1,6 +1,5 @@
 package main
 
-// Imported packages
 import (
 	"fmt"
 	"log"
@@ -24,9 +23,11 @@ import (
 	"github.com/bjma/spotify-filesys/cmd"     // Subcommands
 )
 
-// Authentication details
 const redirectURI = "http://localhost:8080/callback"
+// Global reference to directory tree
+var tree *filesys.Tree
 
+// Authentication details
 var (
 	auth = spotify.NewAuthenticator(redirectURI,
 		spotify.ScopeUserReadPrivate,
@@ -38,10 +39,8 @@ var (
 	client *spotify.Client = nil
 )
 
-// Global reference to directory tree
-var tree *filesys.Tree
-
-// Parses config file and returns a map representation of JSON content
+// Parses config file and returns authentication details 
+// and a map representation of user's folder hierarchy
 // Source: https://golangr.com/read-json-file/
 func readConfig(filename string) (string, string, map[string]string) {
 	// Playlists in config.folders.children field
@@ -98,6 +97,7 @@ func completeAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	// Use token to get authenticated client
 	client := auth.NewClient(token)
+	fmt.Fprintf(w, "Login completed!")
 	ch <- &client
 
 	user, err := client.CurrentUser()
@@ -125,7 +125,7 @@ func execInput(input string) error {
 	case "exit":
 		os.Exit(1)
 	default:
-		return errors.New("computer said to tell u that ur fucking stupid")
+		return errors.New("spfs: command not found: " + input)
 	}
 	return nil
 }
@@ -146,10 +146,10 @@ func main() {
 	fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
 
 	// Wait for auth to complete
-	client = <-ch
+	client = <- ch
 
 	// Construct filesystem and begin interactive shell
-	tree = filesys.BuildTree(client, folders, 0)
+	tree = filesys.BuildTree(client, folders, "user")
 
 	// Shell should loop infinitely unless sent SIGINT is raised or `exit` is executed
 	reader := bufio.NewReader(os.Stdin)
