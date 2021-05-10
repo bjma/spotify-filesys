@@ -63,12 +63,3 @@ Flags:
     * Shows playlist status (collaborative/private/public)
 * `ls --tree`
     * Shows `pwd` as `tree`
-
-## Bugs
-* `tree --artists` is a little bit buggy; some albums have duplicates, and sometimes albums not belonging to an artist shows up in their subdirectory
-* `tree` with more than `1` level gets a bit wonky, need to convert `PrintTree` from iterative to recursive
-    * Also complete shit for printing tracks (first level doesn't print tracks)
-    * Indentation buffer?
-    * Also note that we should have `PrintTree` write into a buffer so that the tree doesn't print line-by-line
-* `treeRecurse` currently gets messed up with the children
-    * doesn't write entire thing to buffer, need to figure out how to get final buffer rather than initial one
