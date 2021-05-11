@@ -7,6 +7,11 @@ This project requires `go1.16.3`. To install, simply run:
 $ go get github.com/bjma/spotify-filesys
 ```
 
+To start the project, simply execute the Makefile using `make` and run the following in your terminal:
+```
+$ ./spfs
+```
+
 ## Setup
 Before doing anything, you should first login to your [dashboard](https://developer.spotify.com/dashboard/login) for Spotify Developers, or create account if you don't have one. There, click the "Create An App" options and set the **Redirect URI** to `http://localhost:8888/callback` in your App settings.
 
@@ -39,7 +44,7 @@ $ spotifyfolders
 
 ## Supported Commands
 ### `whoami`
-Shows user ID
+Displays profile name and ID of user
 ### `pwd` 
 Displays name of current directory (not yet implemented)
 ### `tree`
@@ -63,3 +68,5 @@ Flags:
     * Shows playlist status (collaborative/private/public)
 * `ls --tree`
     * Shows `pwd` as `tree`
+### `cd`
+Changes directory tree cursor to directory of choice.

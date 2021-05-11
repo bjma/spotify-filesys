@@ -17,4 +17,7 @@
 # Ignore hidden files
 .*
 
+# Ignore markdown files
+DESIGN.md
+
 spfs
