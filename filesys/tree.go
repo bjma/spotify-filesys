@@ -1,10 +1,15 @@
 package filesys
 
 import (
+    "bytes"
     "fmt"
     "github.com/zmb3/spotify"
 
     "github.com/bjma/spotify-filesys/api"
+)
+
+var (
+    flag = false
 )
 
 // TODO:
@@ -34,42 +39,46 @@ type Tree struct {
     Num_children int
 }
 
-// Initializes a folder Node by doing a depth-first search on a list of playlists
-// Returns offset for index to avoid unnecessary searches/parsing
-func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (*Node, int) {
-    var children []*Node
-    iter := 0
-
-    n := len(playlists)
-    for i := index; i < n && folders[string(playlists[i].URI)] == dirname; i++ {
-        playlist := playlists[i]
-        children = append(children, newPlaylist(playlist.Name, playlist.ID, false))
-        iter++
-    }
-    // Really jank way to guarantee that last directory entry is a leaf
-    children[len(children)-1].Is_leaf = true
-
-    node := &Node{
-        Name:         dirname,
-        Format:       "folder",
-        Children:     children,
+// Builds a directory tree
+func BuildTree(f map[string]string, opt string) *Tree {
+    nodes := parseLibrary(opt, f)
+    root := Node{
+        Name:         ".",
+        Format:       "root",
+        Children:     nodes,
         Id:           "",
-        Num_children: len(children),
-        Is_leaf:      false,
+        Num_children: len(nodes),
     }
-    return node, iter
+
+    return &Tree{
+        Cwp:          &root, // figure out what to do for root
+        Children:     nodes,
+        Num_children: len(nodes),
+    }
 }
 
-// Initializes a Node of format "Playlist"
-func newPlaylist(name string, playlist_id spotify.ID, is_leaf bool) *Node {
-    return &Node{
-        Name:         name,
-        Format:       "playlist",
-        Children:     nil,
-        Id:           playlist_id,
-        Num_children: 0,
-        Is_leaf:      is_leaf,
+// `tree` command
+func PrintTree(T *Tree, depth int) {
+    dir_tree = T
+
+    var w_buf bytes.Buffer
+    printTreeRecurse(T.Children, ".", depth, &w_buf, 0, false)
+    fmt.Println(w_buf.String())
+}
+
+// Parses entire user library for building filesystem
+func parseLibrary(opt string, folders map[string]string) []*Node {
+    var nodes []*Node
+
+    switch opt {
+    case "user":
+        nodes = constructUserTree(folders)
+    case "artists":
+        nodes = constructArtistTree()
+    case "albums":
+        break
     }
+    return nodes
 }
 
 func constructArtistTree() []*Node {
@@ -119,8 +128,6 @@ func constructUserTree(folders map[string]string) []*Node {
     for i < n {
         uri := string(lib[i].URI)
 
-        // If current playlist is in a folder, parse it as a folder, then append to playlist
-        // Else, just append to nodes as playlist
         if folders[uri] != "" {
             node, iter := newFolder(lib, folders[uri], i, folders)
             nodes = append(nodes, node)
@@ -135,56 +142,123 @@ func constructUserTree(folders map[string]string) []*Node {
     return nodes
 }
 
-// Parses entire user library for building filesystem
-func parseLibrary(opt string, folders map[string]string) []*Node {
-    var nodes []*Node
+// Initializes a folder Node by doing a depth-first search on a list of playlists
+// Returns offset for index to avoid unnecessary searches/parsing
+func newFolder(playlists []spotify.SimplePlaylist, dirname string, index int, folders map[string]string) (*Node, int) {
+    var children []*Node
+    iter := 0
 
-    switch opt {
-    case "user":
-        nodes = constructUserTree(folders)
-    case "artists":
-        nodes = constructArtistTree()
-    case "albums":
-        break
+    n := len(playlists)
+    for i := index; i < n && folders[string(playlists[i].URI)] == dirname; i++ {
+        playlist := playlists[i]
+        children = append(children, newPlaylist(playlist.Name, playlist.ID, false))
+        iter++
     }
-    return nodes
-}
+    // Really jank way to guarantee that last directory entry is a leaf
+    children[len(children)-1].Is_leaf = true
 
-// Runs DFS on given directory and returns the destination
-// This is kind of jank when it goes down to further levels;
-// just returns an empty node (fix later)
-func GetNodeByName(dir []*Node, dirname string) *Node {
-    var ret Node
-    
-    if dir == nil {
-        return nil
-    }
-
-    for _, subdir := range dir {
-        if subdir.Name == dirname {
-            ret = *subdir
-            fmt.Printf("is %s a leaf? %t\n", ret.Name, ret.Is_leaf)
-            break
-        }
-        GetNodeByName(subdir.Children, dirname)
-    }
-    return &ret
-}
-
-// Builds a directory tree
-func BuildTree(f map[string]string, opt string) *Tree {
-    nodes := parseLibrary(opt, f)
-    root := Node{
-        Name:         ".",
-        Format:       "root",
-        Children:     nodes,
+    node := &Node{
+        Name:         dirname,
+        Format:       "folder",
+        Children:     children,
         Id:           "",
-        Num_children: len(nodes),
+        Num_children: len(children),
+        Is_leaf:      false,
     }
+    return node, iter
+}
 
-    return &Tree{
-        Cwp:          &root, // figure out what to do for root
-        Children:     nodes,
-        Num_children: len(nodes),
+// Initializes a Node of format "Playlist"
+func newPlaylist(name string, playlist_id spotify.ID, is_leaf bool) *Node {
+    return &Node{
+        Name:         name,
+        Format:       "playlist",
+        Children:     nil,
+        Id:           playlist_id,
+        Num_children: 0,
+        Is_leaf:      is_leaf,
+    }
+}
+
+// Helper function for treeRecurse that prints up to `depth` tracks
+// Also I want to get a better naming for this function
+func printTracks(id spotify.ID, format string, w_buf *bytes.Buffer, depth int, level int) {
+    var indent string
+    num_spaces := level * 3
+    for i := 0; i < num_spaces; i++ {
+        indent += " "
+    }
+    tracks := api.FetchTracks(id, depth, format)
+    for i, track := range tracks {
+        if flag {
+            w_buf.WriteString("|")
+        }
+        w_buf.WriteString(indent)
+        if i == len(tracks)-1 {
+            w_buf.WriteString("└──")
+        } else {
+            w_buf.WriteString("├──")
+        }
+
+        w_buf.WriteString(track.Name)
+        w_buf.WriteString("\n")
+    }
+}
+
+// Prints tree in preorder traversal by writing each level into
+// a write buffer. The flag is used to signal whether or not the
+// current node is a leaf or not.
+//
+// NOTE: Stop working on treeRecurse for now. Instead, begin implementing ScanDir
+// so that we can accurately determine our position relative to current path level.
+// Also I kind of want a better naming for this function.
+func printTreeRecurse(T []*Node, dirname string, depth int, w_buf *bytes.Buffer, level int, is_leaf bool) {
+    if level > 1 {
+        // If still printing children, then print VER
+        // Else, print extra space
+        if flag {
+            w_buf.WriteString("|")
+        } else {
+            w_buf.WriteString(" ")
+        }
+
+        num_spaces := level * 3 - 3
+        for i := 0; i < num_spaces-1; i++ {
+            w_buf.WriteString(" ")
+        }
+    }
+    if level > 0 {
+        // is_leaf is a temporary fix. We should implement ScanDir to
+        // tell us whether or not the current item is the last entry
+        // in its parent. If so, every time when we return to the 
+        // next recursive level, we should also be able to tell
+        // if the current level is the last in its subdirectory.
+        // Or rather, is_leaf should only be used to determine 
+        // between ELB and TEE; raising/putting down the flag
+        // should then be decided by some other metric (like ScanDir)
+        if is_leaf {
+            w_buf.WriteString("└──")
+        } else {
+            // If we return from the last subdirectory back to another subdirectory, put flag down
+            if flag {
+                flag = false
+            }
+            w_buf.WriteString("├──")
+        }
+    }
+    w_buf.WriteString(dirname)
+    w_buf.WriteString("\n")
+
+    // For each current level, recurse on their children.
+    // If current child is a playlist or album, print up
+    // to `depth` tracks.
+    for _, child := range T {
+        if child != nil {
+            printTreeRecurse(child.Children, child.Name, depth, w_buf, level+1, child.Is_leaf)
+
+            if child.Children == nil {
+                printTracks(child.Id, child.Format, w_buf, depth, level+1)
+            }
+        }
     }
 }

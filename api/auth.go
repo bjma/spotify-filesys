@@ -21,6 +21,21 @@ var (
     client *spotify.Client = nil
 )
 
+func HandleAuth(client_id string, client_secret string) error {
+    auth.SetAuthInfo(client_id, client_secret)
+
+    // Start HTTP server
+    http.HandleFunc("/callback", CompleteAuth)
+    go http.ListenAndServe(":8080", nil)
+
+    url := auth.AuthURL(state)
+    fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
+
+    // Wait for auth to complete
+    client = <- ch
+    return nil // No reason for raising errors yet
+}
+
 // Completes authentication by verifying credentials
 // Source: https://github.com/zmb3/spotify/blob/master/examples/authenticate/authcode/authenticate.go
 func CompleteAuth(w http.ResponseWriter, r *http.Request) {
@@ -43,19 +58,4 @@ func CompleteAuth(w http.ResponseWriter, r *http.Request) {
         log.Fatal(err)
     }
     fmt.Printf("You are logged in as: %s\n\n", user.DisplayName)
-}
-
-func HandleAuth(client_id string, client_secret string) error {
-    auth.SetAuthInfo(client_id, client_secret)
-
-    // Start HTTP server
-    http.HandleFunc("/callback", CompleteAuth)
-    go http.ListenAndServe(":8080", nil)
-
-    url := auth.AuthURL(state)
-    fmt.Printf("Please log in to Spotify by visiting the following page in your browser:%s\n\n", url)
-
-    // Wait for auth to complete
-    client = <- ch
-    return nil // No reason for raising errors yet
 }
