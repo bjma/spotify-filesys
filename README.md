@@ -70,3 +70,6 @@ Flags:
     * Shows `pwd` as `tree`
 ### `cd`
 Changes directory tree cursor to directory of choice.
+
+### `open`
+Ideally it should play the targeted track.
